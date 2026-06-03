@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF Audiobook Studio</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <div>
+          <p class="eyebrow">Local audiobook builder</p>
+          <h1>PDF Audiobook Studio</h1>
+        </div>
+        <section class="tool-status" id="toolStatus">Checking local tools...</section>
+        <section>
+          <h2>Projects</h2>
+          <div class="project-list" id="projectList"></div>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <section class="drop-zone" id="dropZone">
+          <input id="fileInput" type="file" accept="application/pdf,.pdf" />
+          <div class="drop-copy">
+            <span class="drop-icon">PDF</span>
+            <h2>Drop a PDF here</h2>
+            <p>Text extraction happens locally. Voice generation only starts after you review and approve the chapters.</p>
+            <button id="chooseFileButton" type="button">Choose PDF</button>
+          </div>
+        </section>
+
+        <section class="project-editor hidden" id="projectEditor">
+          <div class="editor-header">
+            <div>
+              <label>
+                Title
+                <input id="titleInput" type="text" />
+              </label>
+              <label>
+                Author
+                <input id="authorInput" type="text" placeholder="Optional" />
+              </label>
+            </div>
+            <div class="stats" id="projectStats"></div>
+          </div>
+
+          <div class="generation-panel">
+            <label>
+              ElevenLabs API key
+              <input id="apiKeyInput" type="password" autocomplete="off" placeholder="sk_..." />
+            </label>
+            <label>
+              Voice ID
+              <input id="voiceIdInput" type="text" value="21m00Tcm4TlvDq8ikWAM" />
+            </label>
+            <label>
+              Model
+              <input id="modelInput" type="text" value="eleven_multilingual_v2" />
+            </label>
+            <button id="saveButton" type="button">Save Edits</button>
+            <button id="resplitButton" type="button" class="secondary">Re-split Chapters</button>
+            <button id="generateButton" type="button">Generate M4B</button>
+            <a id="downloadButton" class="download-link hidden" href="#">Download M4B</a>
+          </div>
+
+          <div class="status-line" id="statusLine"></div>
+          <div class="chapters" id="chapters"></div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

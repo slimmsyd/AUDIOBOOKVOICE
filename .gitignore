@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+web/node_modules/
+
+# Next.js
+web/.next/
+web/out/
+web/next-env.d.ts
+web/*.tsbuildinfo
+
+# Generated data / audio artifacts (machine-specific, large)
+data/
+web/data/
+
+# Sample PDFs / large source files
+*.pdf
+
+# Environment
+.env
+.env.local
+web/.env*.local
+
+# OS
+.DS_Store
