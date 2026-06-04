@@ -3,7 +3,8 @@
 import { formatNumber } from "@/components/api";
 import ChapterList from "@/components/ChapterList";
 import GenerationPanel from "@/components/GenerationPanel";
-import type { Chapter, Project } from "@/lib/types";
+import GenerationProgress from "@/components/GenerationProgress";
+import type { Chapter, GenerationProgress as Progress, Project } from "@/lib/types";
 
 interface ProjectEditorProps {
   project: Project;
@@ -15,6 +16,7 @@ interface ProjectEditorProps {
   modelId: string;
   busy: boolean;
   status: string;
+  progress: Progress | null;
   onTitle: (value: string) => void;
   onAuthor: (value: string) => void;
   onChapterChange: (index: number, patch: { title?: string; text?: string }) => void;
@@ -40,6 +42,7 @@ export default function ProjectEditor({
   modelId,
   busy,
   status,
+  progress,
   onTitle,
   onAuthor,
   onChapterChange,
@@ -94,7 +97,11 @@ export default function ProjectEditor({
         onGenerate={onGenerate}
       />
 
-      <div className="min-h-[1.4rem] font-bold text-accent-2">{status}</div>
+      {progress ? (
+        <GenerationProgress progress={progress} downloadUrl={project.output?.downloadUrl ?? null} />
+      ) : (
+        <div className="min-h-[1.4rem] font-bold text-accent-2">{status}</div>
+      )}
 
       <ChapterList chapters={chapters} onChange={onChapterChange} />
     </div>

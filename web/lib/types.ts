@@ -97,3 +97,24 @@ export interface HealthResponse {
   ok: boolean;
   tools: { pdftotext: boolean; ffmpeg: boolean };
 }
+
+// Live progress for the streaming generate endpoint.
+export type GenerationStage = "start" | "voice" | "export" | "chapter" | "done";
+
+export interface GenerationProgress {
+  stage: GenerationStage;
+  message: string;
+  percent: number; // 0-100, character-weighted
+  completedChunks: number;
+  totalChunks: number;
+  chapterIndex: number; // 0-based current chapter
+  chapterCount: number;
+  chapterTitle: string;
+  eta: string;
+}
+
+// Server-Sent-Events payloads emitted by POST /api/projects/:id/generate.
+export type GenerateStreamEvent =
+  | ({ type: "progress" } & GenerationProgress)
+  | { type: "done"; project: Project }
+  | { type: "error"; error: string };

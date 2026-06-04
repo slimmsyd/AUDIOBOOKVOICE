@@ -5,7 +5,14 @@ import { api } from "@/components/api";
 import DropZone from "@/components/DropZone";
 import ProjectEditor from "@/components/ProjectEditor";
 import Sidebar from "@/components/Sidebar";
-import type { Chapter, HealthResponse, Project, ProjectSummary } from "@/lib/types";
+import type {
+  Chapter,
+  GenerateStreamEvent,
+  GenerationProgress,
+  HealthResponse,
+  Project,
+  ProjectSummary,
+} from "@/lib/types";
 
 const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
 const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
@@ -16,6 +23,7 @@ export default function StudioApp() {
   const [toolStatus, setToolStatus] = useState("Checking local tools...");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<GenerationProgress | null>(null);
 
   // Editable working copy (controlled inputs), synced whenever the project changes.
   const [title, setTitle] = useState("");
@@ -76,6 +84,7 @@ export default function StudioApp() {
 
   async function importFile(file: File) {
     setBusy(true);
+    setProgress(null);
     setStatus("Extracting PDF text...");
     try {
       const form = new FormData();
@@ -95,6 +104,7 @@ export default function StudioApp() {
 
   async function openProject(id: string) {
     setStatus("Loading project...");
+    setProgress(null);
     try {
       setProject(await api<Project>(`/api/projects/${id}`));
       setStatus("");
@@ -154,22 +164,61 @@ export default function StudioApp() {
     }
 
     setBusy(true);
-    setStatus("Generating voice and building the M4B. Long books can take a while.");
+    setStatus("");
+    setProgress(null);
     try {
-      const updated = await api<Project>(`/api/projects/${project.id}/generate`, {
+      const response = await fetch(`/api/projects/${project.id}/generate`, {
         method: "POST",
-        body: {
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           ...collectPayload(),
           apiKey: apiKey.trim(),
           voiceId: voiceId.trim(),
           modelId: modelId.trim(),
-        },
+        }),
       });
-      setProject(updated);
-      await loadProjects();
-      setStatus("Audiobook complete. Download is ready.");
+
+      if (!response.ok || !response.body) {
+        throw new Error(`Request failed: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let streamError: string | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+        for (const frame of frames) {
+          const line = frame.split("\n").find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          const event = JSON.parse(line.slice(5).trim()) as GenerateStreamEvent;
+          if (event.type === "progress") {
+            const { type: _type, ...rest } = event;
+            void _type;
+            setProgress(rest);
+          } else if (event.type === "done") {
+            setProject(event.project);
+          } else if (event.type === "error") {
+            streamError = event.error;
+          }
+        }
+      }
+
+      if (streamError) {
+        setStatus(streamError);
+        setProgress(null);
+      } else {
+        await loadProjects();
+      }
     } catch (error) {
       setStatus(messageOf(error));
+      setProgress(null);
     } finally {
       setBusy(false);
     }
@@ -198,6 +247,7 @@ export default function StudioApp() {
             modelId={modelId}
             busy={busy}
             status={status}
+            progress={progress}
             onTitle={setTitle}
             onAuthor={setAuthor}
             onChapterChange={onChapterChange}

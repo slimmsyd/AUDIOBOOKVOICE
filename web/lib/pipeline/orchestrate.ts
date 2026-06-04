@@ -18,7 +18,13 @@ import { cleanExtractedText } from "@/lib/pipeline/extract";
 import { chunkTextForTts, requestElevenLabsAudio } from "@/lib/pipeline/tts";
 import { loadProject, projectPath, saveProject } from "@/lib/project-store";
 import { run } from "@/lib/run";
-import type { GenerateRequest, GenerateSettings, Project } from "@/lib/types";
+import type {
+  GenerateRequest,
+  GenerateSettings,
+  GenerationProgress,
+  GenerationStage,
+  Project,
+} from "@/lib/types";
 
 // Import: write the PDF bytes, extract text via pdftotext, clean, split, persist.
 // (Wire format deviates from the original base64-in-JSON: callers pass raw bytes.)
@@ -95,7 +101,15 @@ export async function resplitProject(id: string): Promise<Project> {
   return project;
 }
 
-export async function generateAudiobook(id: string, body: GenerateRequest): Promise<Project> {
+export async function generateAudiobook(
+  id: string,
+  body: GenerateRequest,
+  onProgress?: (event: GenerationProgress) => void,
+): Promise<Project> {
+  // Validate before mutating state so a missing key doesn't strand status="generating".
+  const apiKey = String(body.apiKey || "").trim();
+  if (!apiKey) throw new Error("ElevenLabs API key is required.");
+
   const project = await loadProject(id);
   project.title = String(body.title || project.title || "Untitled Audiobook");
   project.author = String(body.author || project.author || "");
@@ -103,9 +117,6 @@ export async function generateAudiobook(id: string, body: GenerateRequest): Prom
   project.status = "generating";
   project.updatedAt = new Date().toISOString();
   await saveProject(project);
-
-  const apiKey = String(body.apiKey || "").trim();
-  if (!apiKey) throw new Error("ElevenLabs API key is required.");
 
   const settings: GenerateSettings = {
     voiceId: String(body.voiceId || defaultVoiceId).trim(),
@@ -135,17 +146,42 @@ export async function generateAudiobook(id: string, body: GenerateRequest): Prom
   let completedCharacters = 0;
   let generatedCharacters = 0;
   let generatedMs = 0;
+  let currentChapterIndex = 0;
+  let currentChapterTitle = chapterPlans[0]?.chapter.title ?? "";
 
-  logProgress(
-    "start",
-    `${project.title}: ${project.chapters.length} chapters, ${totalChunks} voice chunks, ${formatNumber(
-      totalCharacters,
-    )} characters`,
-  );
+  const emit = (stage: GenerationStage, message: string) => {
+    onProgress?.({
+      stage,
+      message,
+      percent: totalCharacters
+        ? Math.min(100, Math.round((completedCharacters / totalCharacters) * 100))
+        : 0,
+      completedChunks,
+      totalChunks,
+      chapterIndex: currentChapterIndex,
+      chapterCount: chapterPlans.length,
+      chapterTitle: currentChapterTitle,
+      eta: estimateEta({
+        startedAt,
+        completedCharacters,
+        totalCharacters,
+        generatedCharacters,
+        generatedMs,
+      }),
+    });
+  };
+
+  const startMessage = `${project.title}: ${project.chapters.length} chapters, ${totalChunks} voice chunks, ${formatNumber(
+    totalCharacters,
+  )} characters`;
+  logProgress("start", startMessage);
+  emit("start", startMessage);
 
   const chapterAudio: ChapterAudio[] = [];
   for (let chapterIndex = 0; chapterIndex < chapterPlans.length; chapterIndex += 1) {
     const { chapter, chunks } = chapterPlans[chapterIndex];
+    currentChapterIndex = chapterIndex;
+    currentChapterTitle = chapter.title;
     chapter.status = "generating";
     await saveProject(project);
 
@@ -189,6 +225,7 @@ export async function generateAudiobook(id: string, body: GenerateRequest): Prom
           },
         )}`,
       );
+      emit("voice", `Narrating “${chapter.title}” — chunk ${i + 1}/${chunks.length}`);
       chunkFiles.push(chunkPath);
     }
 
@@ -197,6 +234,7 @@ export async function generateAudiobook(id: string, body: GenerateRequest): Prom
       "export",
       `combining ${chunks.length} chunks for chapter ${chapterIndex + 1}/${chapterPlans.length}`,
     );
+    emit("export", `Assembling chapter ${chapterIndex + 1}/${chapterPlans.length}`);
     await concatAudio(chunkFiles, chapterPath);
     chapter.status = "generated";
     chapter.audioPath = chapterPath;
@@ -207,6 +245,7 @@ export async function generateAudiobook(id: string, body: GenerateRequest): Prom
 
   const outputPath = path.join(dir, `${slug(project.title)}.m4b`);
   logProgress("export", `building final M4B with ${chapterAudio.length} chapter markers`);
+  emit("export", `Building final M4B with ${chapterAudio.length} chapter markers`);
   await buildM4b(project, chapterAudio, outputPath);
 
   project.status = "complete";
@@ -218,7 +257,11 @@ export async function generateAudiobook(id: string, body: GenerateRequest): Prom
   };
   project.updatedAt = new Date().toISOString();
   await saveProject(project);
-  logProgress("done", `${project.title} exported in ${formatDuration(Date.now() - startedAt)}: ${outputPath}`);
+  const doneMessage = `${project.title} exported in ${formatDuration(Date.now() - startedAt)}`;
+  logProgress("done", `${doneMessage}: ${outputPath}`);
+  completedCharacters = totalCharacters;
+  completedChunks = totalChunks;
+  emit("done", doneMessage);
 
   return project;
 }
