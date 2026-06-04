@@ -1,31 +1,34 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api } from "@/components/api";
 import DropZone from "@/components/DropZone";
 import ProjectEditor from "@/components/ProjectEditor";
 import Sidebar from "@/components/Sidebar";
+import { extractProjectFromPdf } from "@/lib/client/extract-pdf";
+import { generateAudiobookClient } from "@/lib/client/generate";
+import * as store from "@/lib/client/store";
+import { slug } from "@/lib/format";
+import { normalizeEditedChapters, splitIntoChapters } from "@/lib/pipeline/chapters";
+import { cleanExtractedText } from "@/lib/pipeline/extract";
 import type {
   Chapter,
-  GenerateStreamEvent,
   GenerationProgress,
-  HealthResponse,
   Project,
   ProjectSummary,
 } from "@/lib/types";
 
 const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
 const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
+const TOOL_STATUS = "Runs in your browser · bring your own ElevenLabs key";
 
 export default function StudioApp() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<Project | null>(null);
-  const [toolStatus, setToolStatus] = useState("Checking local tools...");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<GenerationProgress | null>(null);
 
-  // Editable working copy (controlled inputs), synced whenever the project changes.
+  // Editable working copy.
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -35,28 +38,15 @@ export default function StudioApp() {
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID);
   const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
 
-  const loadProjects = useCallback(async () => {
-    const response = await api<{ projects: ProjectSummary[] }>("/api/projects");
-    setProjects(response.projects);
-  }, []);
-
-  const checkHealth = useCallback(async () => {
-    try {
-      const health = await api<HealthResponse>("/api/health");
-      const pdftotext = health.tools.pdftotext ? "pdftotext ready" : "pdftotext missing";
-      const ffmpeg = health.tools.ffmpeg ? "ffmpeg ready" : "ffmpeg missing";
-      setToolStatus(`${pdftotext}. ${ffmpeg}.`);
-    } catch (error) {
-      setToolStatus(`Server check failed: ${messageOf(error)}`);
-    }
+  const refreshProjects = useCallback(() => {
+    setProjects(store.listProjects());
   }, []);
 
   useEffect(() => {
-    checkHealth();
-    loadProjects();
-  }, [checkHealth, loadProjects]);
+    refreshProjects();
+  }, [refreshProjects]);
 
-  // Sync editable fields when a new project is loaded/saved/generated.
+  // Sync editable fields when a project is loaded/imported.
   useEffect(() => {
     if (!project) return;
     setTitle(project.title || "");
@@ -64,36 +54,31 @@ export default function StudioApp() {
     setChapters(project.chapters.map((chapter) => ({ ...chapter })));
   }, [project]);
 
-  function collectPayload() {
-    return {
-      title: title.trim(),
-      author: author.trim(),
-      chapters: chapters.map((chapter, index) => ({
-        id: chapter.id || `chapter-${index + 1}`,
-        title: chapter.title.trim(),
-        text: chapter.text.trim(),
-      })),
-    };
+  function persist(updated: Project) {
+    setProject(updated);
+    store.saveProject(updated);
+    refreshProjects();
+  }
+
+  function collectEditedChapters() {
+    return chapters.map((chapter, index) => ({
+      id: chapter.id || `chapter-${index + 1}`,
+      title: chapter.title.trim(),
+      text: chapter.text.trim(),
+    }));
   }
 
   function onChapterChange(index: number, patch: { title?: string; text?: string }) {
-    setChapters((prev) =>
-      prev.map((chapter, i) => (i === index ? { ...chapter, ...patch } : chapter)),
-    );
+    setChapters((prev) => prev.map((chapter, i) => (i === index ? { ...chapter, ...patch } : chapter)));
   }
 
   async function importFile(file: File) {
     setBusy(true);
     setProgress(null);
-    setStatus("Extracting PDF text...");
+    setStatus("Reading PDF in your browser…");
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const response = await fetch("/api/import", { method: "POST", body: form });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `Request failed: ${response.status}`);
-      setProject(data as Project);
-      await loadProjects();
+      const imported = await extractProjectFromPdf(file);
+      persist(imported);
       setStatus("Review the detected chapters, then generate the audiobook.");
     } catch (error) {
       setStatus(messageOf(error));
@@ -102,58 +87,50 @@ export default function StudioApp() {
     }
   }
 
-  async function openProject(id: string) {
-    setStatus("Loading project...");
+  function openProject(id: string) {
     setProgress(null);
-    try {
-      setProject(await api<Project>(`/api/projects/${id}`));
+    const loaded = store.getProject(id);
+    if (loaded) {
+      setProject(loaded);
       setStatus("");
-    } catch (error) {
-      setStatus(messageOf(error));
+    } else {
+      setStatus("That project is no longer available.");
     }
   }
 
-  async function saveProject() {
+  function saveEdits() {
     if (!project) return;
-    setBusy(true);
-    setStatus("Saving edits...");
-    try {
-      const updated = await api<Project>(`/api/projects/${project.id}`, {
-        method: "PUT",
-        body: collectPayload(),
-      });
-      setProject(updated);
-      await loadProjects();
-      setStatus("Edits saved.");
-    } catch (error) {
-      setStatus(messageOf(error));
-    } finally {
-      setBusy(false);
-    }
+    const updated: Project = {
+      ...project,
+      title: title.trim() || "Untitled Audiobook",
+      author: author.trim(),
+      chapters: normalizeEditedChapters(collectEditedChapters()),
+      updatedAt: new Date().toISOString(),
+    };
+    persist(updated);
+    setStatus("Edits saved.");
   }
 
-  async function resplitProject() {
+  function resplitProject() {
     if (!project) return;
-    const shouldContinue = window.confirm(
-      "Re-splitting replaces the current chapter edits for this project. Continue?",
-    );
-    if (!shouldContinue) return;
-
-    setBusy(true);
-    setStatus("Re-splitting chapters from the extracted text...");
-    try {
-      const updated = await api<Project>(`/api/projects/${project.id}/resplit`, {
-        method: "POST",
-        body: {},
-      });
-      setProject(updated);
-      await loadProjects();
-      setStatus(`Re-split complete: ${updated.chapters.length} sections detected.`);
-    } catch (error) {
-      setStatus(messageOf(error));
-    } finally {
-      setBusy(false);
+    if (!project.rawText) {
+      setStatus("Re-split needs the original text — re-import this PDF to re-split.");
+      return;
     }
+    if (!window.confirm("Re-splitting replaces the current chapter edits. Continue?")) return;
+
+    const cleaned = cleanExtractedText(project.rawText);
+    const next = splitIntoChapters(cleaned, project.rawText);
+    const updated: Project = {
+      ...project,
+      chapters: next,
+      status: "review",
+      output: null,
+      extraction: { ...project.extraction, cleanedCharacters: cleaned.length, chapterCount: next.length },
+      updatedAt: new Date().toISOString(),
+    };
+    persist(updated);
+    setStatus(`Re-split complete: ${next.length} sections detected.`);
   }
 
   async function generateAudiobook() {
@@ -167,55 +144,31 @@ export default function StudioApp() {
     setStatus("");
     setProgress(null);
     try {
-      const response = await fetch(`/api/projects/${project.id}/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...collectPayload(),
-          apiKey: apiKey.trim(),
-          voiceId: voiceId.trim(),
-          modelId: modelId.trim(),
-        }),
+      const edited = normalizeEditedChapters(collectEditedChapters());
+      const blob = await generateAudiobookClient({
+        chapters: edited,
+        title: title.trim() || "Untitled Audiobook",
+        author: author.trim(),
+        apiKey: apiKey.trim(),
+        voiceId: voiceId.trim() || DEFAULT_VOICE_ID,
+        modelId: modelId.trim() || DEFAULT_MODEL_ID,
+        onProgress: setProgress,
       });
 
-      if (!response.ok || !response.body) {
-        throw new Error(`Request failed: ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let streamError: string | null = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const frames = buffer.split("\n\n");
-        buffer = frames.pop() ?? "";
-        for (const frame of frames) {
-          const line = frame.split("\n").find((l) => l.startsWith("data:"));
-          if (!line) continue;
-          const event = JSON.parse(line.slice(5).trim()) as GenerateStreamEvent;
-          if (event.type === "progress") {
-            const { type: _type, ...rest } = event;
-            void _type;
-            setProgress(rest);
-          } else if (event.type === "done") {
-            setProject(event.project);
-          } else if (event.type === "error") {
-            streamError = event.error;
-          }
-        }
-      }
-
-      if (streamError) {
-        setStatus(streamError);
-        setProgress(null);
-      } else {
-        await loadProjects();
-      }
+      const url = URL.createObjectURL(blob);
+      const updated: Project = {
+        ...project,
+        title: title.trim() || "Untitled Audiobook",
+        author: author.trim(),
+        chapters: edited,
+        status: "complete",
+        output: { format: "m4b", downloadUrl: url, generatedAt: new Date().toISOString() },
+        updatedAt: new Date().toISOString(),
+      };
+      setProject(updated);
+      store.saveProject(updated); // output stripped on persist
+      refreshProjects();
+      triggerDownload(url, `${slug(updated.title)}.m4b`);
     } catch (error) {
       setStatus(messageOf(error));
       setProgress(null);
@@ -227,7 +180,7 @@ export default function StudioApp() {
   return (
     <main className="grid min-h-screen grid-cols-[320px_minmax(0,1fr)] max-[980px]:grid-cols-1">
       <Sidebar
-        toolStatus={toolStatus}
+        toolStatus={TOOL_STATUS}
         projects={projects}
         activeId={project?.id ?? null}
         onOpen={openProject}
@@ -254,7 +207,7 @@ export default function StudioApp() {
             onApiKey={setApiKey}
             onVoiceId={setVoiceId}
             onModelId={setModelId}
-            onSave={saveProject}
+            onSave={saveEdits}
             onResplit={resplitProject}
             onGenerate={generateAudiobook}
           />
@@ -264,6 +217,15 @@ export default function StudioApp() {
       </section>
     </main>
   );
+}
+
+function triggerDownload(url: string, filename: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 function messageOf(error: unknown): string {

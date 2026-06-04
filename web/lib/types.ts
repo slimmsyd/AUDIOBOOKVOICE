@@ -28,7 +28,7 @@ export interface ProjectExtraction {
 
 export interface ProjectOutput {
   format: "m4b";
-  m4bPath: string;
+  m4bPath?: string;
   downloadUrl: string;
   generatedAt: string;
 }
@@ -41,10 +41,11 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   status: ProjectStatus;
-  source: ProjectSource;
+  source?: ProjectSource;
   extraction: ProjectExtraction;
   chapters: Chapter[];
   output: ProjectOutput | null;
+  rawText?: string; // kept for client-side re-split; not persisted/sent
 }
 
 // Summary returned by GET /api/projects
