@@ -1,4 +1,4 @@
-import { elevenLabsBaseUrl } from "@/lib/config";
+import { deepgramSpeakUrl, elevenLabsBaseUrl } from "@/lib/config";
 import type { GenerateSettings } from "@/lib/types";
 
 // Server-side ElevenLabs request (used by the stateless /api/tts proxy).
@@ -30,6 +30,31 @@ export async function requestElevenLabsAudio(
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`ElevenLabs error ${response.status}: ${errorText.slice(0, 500)}`);
+  }
+
+  return response.arrayBuffer();
+}
+
+// Deepgram Aura-2 text-to-speech. The voice IS the model (e.g. aura-2-thalia-en).
+// Default output is MP3, which matches the rest of the pipeline.
+export async function requestDeepgramAudio(
+  apiKey: string,
+  model: string,
+  text: string,
+): Promise<ArrayBuffer> {
+  const url = `${deepgramSpeakUrl}?model=${encodeURIComponent(model)}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Token ${apiKey}`,
+      "Content-Type": "text/plain",
+    },
+    body: text,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Deepgram error ${response.status}: ${errorText.slice(0, 500)}`);
   }
 
   return response.arrayBuffer();

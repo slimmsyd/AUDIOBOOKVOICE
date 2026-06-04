@@ -56,7 +56,8 @@ export default function DropZone({ disabled, onFile, onMessage }: DropZoneProps)
         </span>
         <h2 className="mb-[0.4rem] text-[2rem] font-bold">Drop a PDF here</h2>
         <p className="leading-relaxed text-muted">
-          Review the detected chapters, then generate the audiobook with your ElevenLabs API key.
+          Review the detected chapters, then generate the audiobook with your ElevenLabs or
+          Deepgram API key.
         </p>
         <button
           type="button"

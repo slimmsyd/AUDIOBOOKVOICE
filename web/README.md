@@ -1,8 +1,8 @@
 # PDF to Audiobook — Web App
 
-Turn a PDF into an M4B audiobook with **your own ElevenLabs API key**. Upload a PDF,
-review the auto-detected chapters, then generate — with live progress and a download
-when it's done.
+Turn a PDF into an M4B audiobook with **your own voice API key** — choose **ElevenLabs** or
+**Deepgram (Aura-2)**. Upload a PDF, review the auto-detected chapters, then generate — with
+live progress and a download when it's done.
 
 ## Architecture (serverless-friendly / Vercel-ready)
 
@@ -14,7 +14,8 @@ no binaries, no database, and no persistent disk:
 - **Chapter detection** — the original clean + split logic, reused on the client.
 - **Voice generation** — the browser calls a tiny stateless API route **`/api/tts`** once
   per text chunk (BYO key, used per-request, never stored). Looping short requests sidesteps
-  serverless time limits.
+  serverless time limits. Supports **ElevenLabs** and **Deepgram Aura-2** (chunk size adapts
+  to each provider's limit — 4500 chars for ElevenLabs, 1900 for Deepgram's 2000 cap).
 - **M4B assembly** — [`ffmpeg.wasm`](https://ffmpegwasm.netlify.app/) (single-threaded core,
   no COOP/COEP headers needed) muxes the MP3 chunks into an M4B with chapter markers, entirely
   in the browser, then triggers the download.

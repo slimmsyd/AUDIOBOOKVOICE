@@ -10,16 +10,18 @@ import * as store from "@/lib/client/store";
 import { slug } from "@/lib/format";
 import { normalizeEditedChapters, splitIntoChapters } from "@/lib/pipeline/chapters";
 import { cleanExtractedText } from "@/lib/pipeline/extract";
+import { defaultDeepgramModel } from "@/lib/config";
 import type {
   Chapter,
   GenerationProgress,
   Project,
   ProjectSummary,
+  TtsProvider,
 } from "@/lib/types";
 
 const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM";
 const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
-const TOOL_STATUS = "Runs in your browser · bring your own ElevenLabs key";
+const TOOL_STATUS = "Runs in your browser · bring your own voice key (ElevenLabs or Deepgram)";
 
 export default function StudioApp() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -34,9 +36,12 @@ export default function StudioApp() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
 
   // Generation settings persist across projects.
+  const [provider, setProvider] = useState<TtsProvider>("elevenlabs");
   const [apiKey, setApiKey] = useState("");
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID);
   const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
+  const [deepgramKey, setDeepgramKey] = useState("");
+  const [deepgramModel, setDeepgramModel] = useState(defaultDeepgramModel);
 
   const refreshProjects = useCallback(() => {
     setProjects(store.listProjects());
@@ -135,8 +140,9 @@ export default function StudioApp() {
 
   async function generateAudiobook() {
     if (!project) return;
-    if (!apiKey.trim()) {
-      setStatus("Add your ElevenLabs API key first.");
+    const activeKey = (provider === "deepgram" ? deepgramKey : apiKey).trim();
+    if (!activeKey) {
+      setStatus(`Add your ${provider === "deepgram" ? "Deepgram" : "ElevenLabs"} API key first.`);
       return;
     }
 
@@ -149,9 +155,11 @@ export default function StudioApp() {
         chapters: edited,
         title: title.trim() || "Untitled Audiobook",
         author: author.trim(),
-        apiKey: apiKey.trim(),
+        provider,
+        apiKey: activeKey,
         voiceId: voiceId.trim() || DEFAULT_VOICE_ID,
         modelId: modelId.trim() || DEFAULT_MODEL_ID,
+        deepgramModel: deepgramModel.trim() || defaultDeepgramModel,
         onProgress: setProgress,
       });
 
@@ -195,18 +203,24 @@ export default function StudioApp() {
             title={title}
             author={author}
             chapters={chapters}
+            provider={provider}
             apiKey={apiKey}
             voiceId={voiceId}
             modelId={modelId}
+            deepgramKey={deepgramKey}
+            deepgramModel={deepgramModel}
             busy={busy}
             status={status}
             progress={progress}
             onTitle={setTitle}
             onAuthor={setAuthor}
             onChapterChange={onChapterChange}
+            onProvider={setProvider}
             onApiKey={setApiKey}
             onVoiceId={setVoiceId}
             onModelId={setModelId}
+            onDeepgramKey={setDeepgramKey}
+            onDeepgramModel={setDeepgramModel}
             onSave={saveEdits}
             onResplit={resplitProject}
             onGenerate={generateAudiobook}

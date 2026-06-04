@@ -1,15 +1,20 @@
 import { assembleM4b, type ChapterAudio } from "@/lib/client/assemble";
+import { maxTtsCharsByProvider } from "@/lib/config";
 import { estimateEta } from "@/lib/format";
 import { chunkTextForTts } from "@/lib/pipeline/chunk";
-import type { Chapter, GenerationProgress, GenerationStage } from "@/lib/types";
+import type { Chapter, GenerationProgress, GenerationStage, TtsProvider } from "@/lib/types";
 
 export interface GenerateOptions {
   chapters: Chapter[];
   title: string;
   author: string;
+  provider: TtsProvider;
   apiKey: string;
-  voiceId: string;
-  modelId: string;
+  // ElevenLabs
+  voiceId?: string;
+  modelId?: string;
+  // Deepgram (voice == model, e.g. aura-2-thalia-en)
+  deepgramModel?: string;
   onProgress: (progress: GenerationProgress) => void;
   signal?: AbortSignal;
 }
@@ -19,9 +24,16 @@ export interface GenerateOptions {
 //   then ffmpeg.wasm assembles the M4B with chapter markers.
 // Voice covers 0-90% of the bar; assembly covers 90-100%.
 export async function generateAudiobookClient(options: GenerateOptions): Promise<Blob> {
-  const { chapters, title, author, apiKey, voiceId, modelId, onProgress, signal } = options;
+  const { chapters, title, author, provider, apiKey, voiceId, modelId, deepgramModel, onProgress, signal } =
+    options;
 
-  const plans = chapters.map((chapter) => ({ chapter, chunks: chunkTextForTts(chapter.text) }));
+  const maxChars = maxTtsCharsByProvider[provider];
+  const ttsBody =
+    provider === "deepgram"
+      ? { provider, apiKey, model: deepgramModel }
+      : { provider, apiKey, voiceId, modelId };
+
+  const plans = chapters.map((chapter) => ({ chapter, chunks: chunkTextForTts(chapter.text, maxChars) }));
   const totalChunks = plans.reduce((sum, p) => sum + p.chunks.length, 0);
   const totalCharacters = plans.reduce(
     (sum, p) => sum + p.chunks.reduce((s, c) => s + c.length, 0),
@@ -78,7 +90,7 @@ export async function generateAudiobookClient(options: GenerateOptions): Promise
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey, text: chunk, voiceId, modelId }),
+        body: JSON.stringify({ ...ttsBody, text: chunk }),
         signal,
       });
       if (!response.ok) {

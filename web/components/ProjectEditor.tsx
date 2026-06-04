@@ -4,25 +4,36 @@ import { formatNumber } from "@/components/api";
 import ChapterList from "@/components/ChapterList";
 import GenerationPanel from "@/components/GenerationPanel";
 import GenerationProgress from "@/components/GenerationProgress";
-import type { Chapter, GenerationProgress as Progress, Project } from "@/lib/types";
+import type {
+  Chapter,
+  GenerationProgress as Progress,
+  Project,
+  TtsProvider,
+} from "@/lib/types";
 
 interface ProjectEditorProps {
   project: Project;
   title: string;
   author: string;
   chapters: Chapter[];
+  provider: TtsProvider;
   apiKey: string;
   voiceId: string;
   modelId: string;
+  deepgramKey: string;
+  deepgramModel: string;
   busy: boolean;
   status: string;
   progress: Progress | null;
   onTitle: (value: string) => void;
   onAuthor: (value: string) => void;
   onChapterChange: (index: number, patch: { title?: string; text?: string }) => void;
+  onProvider: (value: TtsProvider) => void;
   onApiKey: (value: string) => void;
   onVoiceId: (value: string) => void;
   onModelId: (value: string) => void;
+  onDeepgramKey: (value: string) => void;
+  onDeepgramModel: (value: string) => void;
   onSave: () => void;
   onResplit: () => void;
   onGenerate: () => void;
@@ -37,18 +48,24 @@ export default function ProjectEditor({
   title,
   author,
   chapters,
+  provider,
   apiKey,
   voiceId,
   modelId,
+  deepgramKey,
+  deepgramModel,
   busy,
   status,
   progress,
   onTitle,
   onAuthor,
   onChapterChange,
+  onProvider,
   onApiKey,
   onVoiceId,
   onModelId,
+  onDeepgramKey,
+  onDeepgramModel,
   onSave,
   onResplit,
   onGenerate,
@@ -84,14 +101,20 @@ export default function ProjectEditor({
       </div>
 
       <GenerationPanel
+        provider={provider}
         apiKey={apiKey}
         voiceId={voiceId}
         modelId={modelId}
+        deepgramKey={deepgramKey}
+        deepgramModel={deepgramModel}
         busy={busy}
         downloadUrl={project.output?.downloadUrl ?? null}
+        onProvider={onProvider}
         onApiKey={onApiKey}
         onVoiceId={onVoiceId}
         onModelId={onModelId}
+        onDeepgramKey={onDeepgramKey}
+        onDeepgramModel={onDeepgramModel}
         onSave={onSave}
         onResplit={onResplit}
         onGenerate={onGenerate}

@@ -1,21 +1,48 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { TtsProvider } from "@/lib/types";
 
-const STEPS = [
-  <>Sign in at <strong>elevenlabs.io</strong> (a free account works).</>,
-  <>Open <strong>Developers</strong> at the bottom of the left sidebar.</>,
-  <>Click the <strong>API Keys</strong> tab.</>,
-  <>Click <strong>+ Create Key</strong>, give it a name, and create it.</>,
-  <><strong>Copy</strong> the key.</>,
-  <>Paste it into the API key field here.</>,
-];
+interface HelpContent {
+  title: string;
+  steps: ReactNode[];
+  url: string;
+  linkLabel: string;
+}
 
-const API_KEYS_URL = "https://elevenlabs.io/app/developers/api-keys";
+const CONTENT: Record<TtsProvider, HelpContent> = {
+  elevenlabs: {
+    title: "Get your ElevenLabs API key",
+    url: "https://elevenlabs.io/app/developers/api-keys",
+    linkLabel: "Open ElevenLabs API Keys",
+    steps: [
+      <>Sign in at <strong>elevenlabs.io</strong> (a free account works).</>,
+      <>Open <strong>Developers</strong> at the bottom of the left sidebar.</>,
+      <>Click the <strong>API Keys</strong> tab.</>,
+      <>Click <strong>+ Create Key</strong>, give it a name, and create it.</>,
+      <><strong>Copy</strong> the key.</>,
+      <>Paste it into the API key field here.</>,
+    ],
+  },
+  deepgram: {
+    title: "Get your Deepgram API key",
+    url: "https://console.deepgram.com/",
+    linkLabel: "Open Deepgram Console",
+    steps: [
+      <>Sign in at <strong>console.deepgram.com</strong> (free credit included).</>,
+      <>Open <strong>API Keys</strong> in the left sidebar.</>,
+      <>Click <strong>Create a New API Key</strong>.</>,
+      <>Name it, keep the default scope, and create it.</>,
+      <><strong>Copy</strong> the key.</>,
+      <>Paste it here and pick an Aura-2 voice.</>,
+    ],
+  },
+};
 
-export default function ApiKeyHelp() {
+export default function ApiKeyHelp({ provider }: { provider: TtsProvider }) {
   const [open, setOpen] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const content = CONTENT[provider];
 
   useEffect(() => {
     if (!open) return;
@@ -56,7 +83,7 @@ export default function ApiKeyHelp() {
           >
             <div className="flex items-start justify-between gap-4">
               <h2 id="apikey-help-title" className="text-lg font-bold">
-                Get your ElevenLabs API key
+                {content.title}
               </h2>
               <button
                 ref={closeRef}
@@ -72,7 +99,7 @@ export default function ApiKeyHelp() {
             </div>
 
             <ol className="mt-4 grid gap-2.5">
-              {STEPS.map((step, i) => (
+              {content.steps.map((step, i) => (
                 <li key={i} className="flex gap-3 text-sm leading-relaxed">
                   <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-soft text-[0.7rem] font-bold text-accent">
                     {i + 1}
@@ -83,18 +110,18 @@ export default function ApiKeyHelp() {
             </ol>
 
             <p className="mt-4 text-[0.8rem] leading-relaxed text-muted">
-              Your key controls your ElevenLabs usage and billing. We never store it — it&apos;s used
-              only to generate your audio.
+              Your key controls your usage and billing. We never store it — it&apos;s used only to
+              generate your audio.
             </p>
 
             <div className="mt-5 flex items-center justify-between gap-3">
               <a
-                href={API_KEYS_URL}
+                href={content.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-bold text-white transition-colors duration-200 hover:bg-[#095a54] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
-                Open ElevenLabs API Keys
+                {content.linkLabel}
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden>
                   <path d="M7 17L17 7M9 7h8v8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>

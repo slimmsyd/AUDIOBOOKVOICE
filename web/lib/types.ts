@@ -66,6 +66,8 @@ export interface EditedChapter {
   text: string;
 }
 
+export type TtsProvider = "elevenlabs" | "deepgram";
+
 export interface GenerateSettings {
   voiceId: string;
   modelId: string;
