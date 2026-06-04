@@ -1,5 +1,7 @@
 "use client";
 
+import ApiKeyHelp from "@/components/ApiKeyHelp";
+
 interface GenerationPanelProps {
   apiKey: string;
   voiceId: string;
@@ -33,17 +35,20 @@ export default function GenerationPanel({
 }: GenerationPanelProps) {
   return (
     <div className="grid items-end gap-3 rounded-lg border border-line bg-panel p-4 grid-cols-[minmax(180px,1.1fr)_minmax(150px,0.7fr)_minmax(160px,0.7fr)_auto_auto_auto] max-[980px]:grid-cols-1">
-      <label className={labelClass}>
-        ElevenLabs API key
-        <input
-          type="password"
-          autoComplete="off"
-          placeholder="sk_..."
-          value={apiKey}
-          onChange={(event) => onApiKey(event.target.value)}
-          className={fieldClass}
-        />
-      </label>
+      <div className="grid gap-1">
+        <label className={labelClass}>
+          ElevenLabs API key
+          <input
+            type="password"
+            autoComplete="off"
+            placeholder="sk_..."
+            value={apiKey}
+            onChange={(event) => onApiKey(event.target.value)}
+            className={fieldClass}
+          />
+        </label>
+        <ApiKeyHelp />
+      </div>
       <label className={labelClass}>
         Voice ID
         <input
